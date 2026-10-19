@@ -331,7 +331,9 @@ python pf.py compare "wax seal kit" "wax seal stamp" "sealing wax sticks" --brie
 ### The flags
 
 - **`LOW COMPETITION + HIGH FAVORITES`** — the combination you are hunting:
-  under 2,500 competing listings and over 25 average favourites. Look here first.
+  under 2,500 competing listings *and* at least 150 average favourites. Look
+  here first. Both numbers are tunable (`LOW_COMPETITION_LISTINGS`,
+  `HIGH_FAVORITES_AVERAGE`).
 - `low competition` / `high favorites` — one of the two, but not both.
 - `saturated` — 10,000+ competing listings. Hard to get seen.
 - `dominated by few shops` — a handful of sellers hold the sample. Could mean an
@@ -414,10 +416,27 @@ those are what we use:
   (capped at $20) + 20% best margin (capped at 60%). A niche with no profitable
   supplier scores near zero however popular it is.
 
-All scores use a **logarithm**, because these numbers are hugely skewed: going
-from 10 to 100 competing listings matters far more than going from 9,010 to
-9,100. The reference points are constants at the top of `scoring.py` — change
-them if your category behaves differently.
+Each score maps a **range** onto 0–100 on a **logarithmic** curve. The log
+matters because these numbers are hugely skewed: going from 10 to 100
+competing listings matters far more than going from 9,010 to 9,100. The range
+matters too — an earlier version scaled up from zero to a single reference
+point, and the result was that *every* real Etsy keyword scored 100 on demand,
+which made comparing niches meaningless.
+
+The ranges are set in `.env`, so you can tune them without touching code:
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `DEMAND_FAVORITES_LOW` | `10` | This many average favourites scores 0 |
+| `DEMAND_FAVORITES_HIGH` | `2000` | This many or more scores 100 |
+| `COMPETITION_LISTINGS_LOW` | `200` | This few competitors scores 100 |
+| `COMPETITION_LISTINGS_HIGH` | `50000` | This many or more scores 0 |
+
+**If everything you search scores 100 on demand, raise
+`DEMAND_FAVORITES_HIGH`.** Popular craft-supply keywords routinely average
+several hundred favourites per listing, and the scores are only useful if they
+spread your actual candidates across the range rather than pinning them at the
+top.
 
 **Favourites are a proxy for demand, not a measure of sales.** People favourite
 things they want but have not bought. Treat the scores as a way to sort a
@@ -439,6 +458,8 @@ The ones you are most likely to change:
 | `ASSUMED_SHIPPING` | `2.50` | What to assume AliExpress shipping costs when the API does not say. |
 | `SHIP_TO_COUNTRY` | `US` | Your country, which changes AliExpress prices. |
 | `CACHE_TTL_HOURS` | `24` | How long to reuse saved API responses. |
+| `DEMAND_FAVORITES_HIGH` | `2000` | Raise it if every keyword scores 100 on demand. |
+| `HIGH_FAVORITES_AVERAGE` | `150` | The bar for the "high favorites" flag. |
 
 Rates are decimals: `0.065` means 6.5%.
 
@@ -551,9 +572,9 @@ product_finder/
   demo.py                Sample data for `pf.py demo`.
 ```
 
-A good first change: open `scoring.py` and adjust
-`LOW_COMPETITION_LISTINGS` or `HIGH_FAVORITES_AVERAGE`, then re-run
-`python pf.py demo` and watch the flags change.
+A good first change: edit `HIGH_FAVORITES_AVERAGE` or
+`DEMAND_FAVORITES_HIGH` in your `.env`, then re-run `python pf.py demo` and
+watch the scores and flags move. No code change needed.
 
 ---
 

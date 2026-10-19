@@ -27,9 +27,10 @@ from .table import Painter, money, percent, render_table
 
 def print_keyword_result(result: KeywordResult, paint: Painter) -> None:
     demand = result.demand
+    label = "niche score" if result.sourcing_checked else "Etsy-only score"
     print()
     print(paint.bold(f'=== "{result.keyword}" ') + paint.accent(
-        f"niche score {result.niche_score:.0f}/100"
+        f"{label} {result.niche_score:.0f}/100"
     ))
 
     summary = render_table(

@@ -43,6 +43,10 @@ class KeywordResult:
     candidates: list[Candidate] = field(default_factory=list)
     niche_score: float = 0.0
     warnings: list[str] = field(default_factory=list)
+    # False when AliExpress was never consulted, so the niche score reflects
+    # Etsy demand alone and should be labelled as such rather than compared
+    # against keywords that do include sourcing data.
+    sourcing_checked: bool = False
 
     @property
     def best(self) -> Candidate | None:
@@ -74,8 +78,12 @@ def research_keyword(
     listings, listing_count = etsy.search_active_listings(
         keyword, limit=settings.etsy_limit, refresh=refresh
     )
-    demand = analyse_keyword(keyword, listings, listing_count)
+    demand = analyse_keyword(keyword, listings, listing_count, settings.thresholds)
     result = KeywordResult(keyword=keyword, demand=demand, listings=listings)
+    # Start from the Etsy-only view. If sourcing data arrives below, this gets
+    # recalculated; if it does not, this remains the honest answer rather than
+    # the 0 an un-set score would leave behind.
+    result.niche_score = demand.opportunity_score
 
     if not listings:
         result.warnings.append(
@@ -91,6 +99,7 @@ def research_keyword(
         )
         return result
 
+    result.sourcing_checked = True
     try:
         products = ali.search_products(
             keyword, limit=settings.aliexpress_limit, refresh=refresh

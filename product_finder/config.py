@@ -50,9 +50,24 @@ def load_env(path: Path | None = None) -> dict[str, str]:
         key, _, value = line.partition("=")
         key = key.strip()
         value = value.strip()
-        # Strip one matching pair of surrounding quotes, if present.
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-            value = value[1:-1]
+
+        if value[:1] in ("\"", "'") and value.find(value[0], 1) != -1:
+            # Quoted: take what is inside the first matching pair of quotes,
+            # and ignore anything after the closing quote. This is how you
+            # keep a '#' or a trailing comment off a value.
+            quote = value[0]
+            value = value[1 : value.find(quote, 1)]
+        else:
+            # Unquoted: a '#' that follows whitespace starts a trailing
+            # comment, so that `ETSY_LIMIT=100   # max 100` reads as "100".
+            # A '#' with no space before it is kept, since it may be part of
+            # the value itself (a colour code, say).
+            for marker in (" #", "\t#"):
+                position = value.find(marker)
+                if position != -1:
+                    value = value[:position]
+            value = value.strip()
+
         if not key:
             continue
         found[key] = value
@@ -77,6 +92,27 @@ def _env_float(name: str, default: float) -> float:
 
 def _env_int(name: str, default: int) -> int:
     return int(_env_float(name, float(default)))
+
+
+def _is_placeholder(value: str) -> bool:
+    """True if this is still the example text, not a real credential.
+
+    Copying .env.example to .env leaves lines like
+
+        ETSY_API_KEY=paste_your_etsy_keystring_here
+
+    Treating those as real would send gibberish to the API and produce a
+    confusing 403. We treat them as missing instead, so you get the clear
+    'key is missing' message that tells you what to do.
+    """
+    lowered = value.strip().lower()
+    return lowered.startswith("paste_your") or lowered.endswith("_here")
+
+
+def _credential(name: str) -> str:
+    """Read a secret from the environment, ignoring unedited placeholders."""
+    value = os.environ.get(name, "").strip()
+    return "" if _is_placeholder(value) else value
 
 
 @dataclass
@@ -117,6 +153,48 @@ class Fees:
 
 
 @dataclass
+class Thresholds:
+    """The dials that turn raw Etsy numbers into 0-100 scores.
+
+    These are judgement calls, not facts, and the right values depend on your
+    category. The defaults were calibrated against real craft-supply searches,
+    where a popular keyword averages hundreds of favourites per listing -- far
+    more than you might guess.
+
+    Each score maps a *range* onto 0-100 on a log curve: at or below `low` you
+    score 0, at or above `high` you score 100. Using a range rather than
+    counting up from zero is what stops every busy keyword scoring 100.
+    """
+
+    # Average favourites per listing: this many or fewer scores 0 on demand...
+    demand_favorites_low: float = 10.0
+    # ...and this many or more scores 100.
+    demand_favorites_high: float = 2000.0
+
+    # Competing listings: this many or fewer scores 100 on low-competition...
+    competition_listings_low: float = 200.0
+    # ...and this many or more scores 0.
+    competition_listings_high: float = 50000.0
+
+    # Flag thresholds.
+    low_competition_listings: int = 2500
+    high_favorites_average: float = 150.0
+    saturated_listings: int = 10000
+
+    @classmethod
+    def from_env(cls) -> "Thresholds":
+        return cls(
+            demand_favorites_low=_env_float("DEMAND_FAVORITES_LOW", 10.0),
+            demand_favorites_high=_env_float("DEMAND_FAVORITES_HIGH", 2000.0),
+            competition_listings_low=_env_float("COMPETITION_LISTINGS_LOW", 200.0),
+            competition_listings_high=_env_float("COMPETITION_LISTINGS_HIGH", 50000.0),
+            low_competition_listings=_env_int("LOW_COMPETITION_LISTINGS", 2500),
+            high_favorites_average=_env_float("HIGH_FAVORITES_AVERAGE", 150.0),
+            saturated_listings=_env_int("SATURATED_LISTINGS", 10000),
+        )
+
+
+@dataclass
 class Settings:
     """Everything the tool needs to run."""
 
@@ -144,16 +222,17 @@ class Settings:
     output_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "reports")
 
     fees: Fees = field(default_factory=Fees)
+    thresholds: "Thresholds" = field(default_factory=lambda: Thresholds())
 
     @classmethod
     def load(cls, env_path: Path | None = None) -> "Settings":
         load_env(env_path)
         return cls(
-            etsy_api_key=os.environ.get("ETSY_API_KEY", "").strip(),
-            etsy_shared_secret=os.environ.get("ETSY_SHARED_SECRET", "").strip(),
-            aliexpress_app_key=os.environ.get("ALIEXPRESS_APP_KEY", "").strip(),
-            aliexpress_app_secret=os.environ.get("ALIEXPRESS_APP_SECRET", "").strip(),
-            aliexpress_tracking_id=os.environ.get("ALIEXPRESS_TRACKING_ID", "").strip(),
+            etsy_api_key=_credential("ETSY_API_KEY"),
+            etsy_shared_secret=_credential("ETSY_SHARED_SECRET"),
+            aliexpress_app_key=_credential("ALIEXPRESS_APP_KEY"),
+            aliexpress_app_secret=_credential("ALIEXPRESS_APP_SECRET"),
+            aliexpress_tracking_id=_credential("ALIEXPRESS_TRACKING_ID"),
             etsy_limit=max(1, min(100, _env_int("ETSY_LIMIT", 100))),
             aliexpress_limit=max(1, min(50, _env_int("ALIEXPRESS_LIMIT", 40))),
             currency=os.environ.get("CURRENCY", "USD").strip().upper() or "USD",
@@ -170,6 +249,7 @@ class Settings:
             cache_ttl_hours=_env_float("CACHE_TTL_HOURS", 24.0),
             output_dir=Path(os.environ.get("OUTPUT_DIR", str(PROJECT_ROOT / "reports"))),
             fees=Fees.from_env(),
+            thresholds=Thresholds.from_env(),
         )
 
     @property
