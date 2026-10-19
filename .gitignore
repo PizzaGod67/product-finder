@@ -1,0 +1,12 @@
+# Your secrets. Never commit this.
+.env
+
+# Cached API responses and generated reports
+.cache/
+reports/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
