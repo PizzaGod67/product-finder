@@ -87,6 +87,34 @@ def estimate_profit(
     )
 
 
+def max_sourcing_cost(
+    etsy_price: float, fees: Fees, target_margin: float = 0.0
+) -> float:
+    """The most you can pay a supplier, delivered, and still hit `target_margin`.
+
+    This is the profit equation solved for cost instead of profit:
+
+        profit = revenue - fees - cost
+        cost   = revenue - fees - (target_margin x revenue)
+
+    With `target_margin=0` you get break-even: pay a penny more than this and
+    the sale loses money. It is the single most useful number when you have
+    Etsy data but no supplier prices yet, because it turns "is this niche any
+    good?" into a concrete shopping budget you can check against AliExpress.
+
+    Remember it is a *landed* cost -- item price plus shipping to you.
+    """
+    revenue = max(0.0, float(etsy_price)) + fees.shipping_charged
+    total_fees = (
+        revenue * fees.transaction_rate
+        + revenue * fees.payment_rate
+        + fees.payment_flat
+        + fees.listing_flat
+        + revenue * fees.offsite_ads_rate
+    )
+    return round(revenue - total_fees - (target_margin * revenue), 2)
+
+
 def typical_etsy_price(listings: list[EtsyListing]) -> float:
     """The price to assume you could sell at.
 

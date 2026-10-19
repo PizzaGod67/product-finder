@@ -14,6 +14,7 @@ from .aliexpress import AliExpressClient
 from .analysis import KeywordResult, research_keyword
 from .cache import Cache
 from .config import Settings, SettingsError
+from .economics import max_sourcing_cost
 from .etsy import EtsyClient
 from .http import ApiError
 from .report import default_paths, write_csv, write_html
@@ -25,7 +26,9 @@ from .table import Painter, money, percent, render_table
 # --------------------------------------------------------------------------
 
 
-def print_keyword_result(result: KeywordResult, paint: Painter) -> None:
+def print_keyword_result(
+    result: KeywordResult, settings: Settings, paint: Painter
+) -> None:
     demand = result.demand
     label = "niche score" if result.sourcing_checked else "Etsy-only score"
     print()
@@ -64,6 +67,28 @@ def print_keyword_result(result: KeywordResult, paint: Painter) -> None:
 
     for warning in result.warnings:
         print(paint.warn("Note: ") + warning)
+
+    # Without supplier prices, the actionable number is not profit but the
+    # budget: how cheaply you would have to source to make this work at all.
+    if not result.candidates and demand.typical_price > 0:
+        breakeven = max_sourcing_cost(demand.typical_price, settings.fees)
+        healthy = max_sourcing_cost(demand.typical_price, settings.fees, 0.20)
+        print()
+        print(paint.dim(
+            f"  Selling at the {money(demand.typical_price)} median, your landed cost "
+            f"(item + shipping) must stay under:"
+        ))
+        verdict = paint.good if healthy >= 4.0 else paint.bad
+        print(
+            f"    {money(breakeven)} to break even    "
+            f"{verdict(money(healthy))} for a 20% margin"
+        )
+        if healthy < 4.0:
+            print(paint.bad(
+                "    That is a very tight budget once AliExpress shipping is "
+                "counted. Low-priced\n"
+                "    niches look attractive on demand and rarely survive the fees."
+            ))
 
     if result.candidates:
         print()
@@ -111,7 +136,9 @@ def print_keyword_result(result: KeywordResult, paint: Painter) -> None:
         print(paint.dim(f"  Common Etsy tags: {tags}"))
 
 
-def print_comparison(results: list[KeywordResult], paint: Painter) -> None:
+def print_comparison(
+    results: list[KeywordResult], settings: Settings, paint: Painter
+) -> None:
     ranked = sorted(results, key=lambda r: r.niche_score, reverse=True)
     print()
     print(paint.bold("=== Niche comparison (best first) ==="))
@@ -131,17 +158,31 @@ def print_comparison(results: list[KeywordResult], paint: Painter) -> None:
             f"{result.demand.listing_count:,}",
             f"{result.demand.mean_favorites:,.1f}",
             money(result.demand.typical_price),
-            money(best.profit.profit) if best else "--",
+            # With no supplier data, show the sourcing budget instead of a
+            # profit we cannot know. A tight budget is the real constraint in
+            # cheap niches, and it would otherwise be invisible here.
+            money(best.profit.profit) if best else (
+                money(max_sourcing_cost(
+                    result.demand.typical_price, settings.fees, 0.20
+                )) if result.demand.typical_price > 0 else "--"
+            ),
             percent(best.profit.margin) if best else "--",
             flag,
         ])
+    any_profit = any(r.candidates for r in ranked)
+    money_column = "Best profit" if any_profit else "Budget @20%"
     print(render_table(
         ["#", "Keyword", "Niche", "Opp", "Competing", "Avg favs",
-         "Typical", "Best profit", "Margin", ""],
+         "Typical", money_column, "Margin", "Flag"],
         rows,
         max_widths=[3, 30, 6, 5, 11, 9, 10, 12, 7, 16],
         align="rlrrrrrrrl",
     ))
+    if not any_profit:
+        print(paint.dim(
+            "  Budget @20% = the most you can pay a supplier (item + shipping)\n"
+            "  and still keep a 20% margin at that typical selling price."
+        ))
 
 
 # --------------------------------------------------------------------------
@@ -247,7 +288,7 @@ def cmd_search(args: argparse.Namespace, settings: Settings, paint: Painter) -> 
         return 2
     results = run_research([keyword], settings, args, paint)
     for result in results:
-        print_keyword_result(result, paint)
+        print_keyword_result(result, settings, paint)
     save_outputs(results, [keyword], settings, args, "search", paint)
     print_disclaimer(paint)
     return 0 if results else 1
@@ -263,8 +304,8 @@ def cmd_compare(args: argparse.Namespace, settings: Settings, paint: Painter) ->
         return 1
     if not args.brief:
         for result in results:
-            print_keyword_result(result, paint)
-    print_comparison(results, paint)
+            print_keyword_result(result, settings, paint)
+    print_comparison(results, settings, paint)
     save_outputs(results, keywords, settings, args, "compare", paint)
     print_disclaimer(paint)
     return 0
@@ -385,8 +426,8 @@ def cmd_demo(args: argparse.Namespace, settings: Settings, paint: Painter) -> in
         etsy_only=args.etsy_only,
     )
     for result in results:
-        print_keyword_result(result, paint)
-    print_comparison(results, paint)
+        print_keyword_result(result, settings, paint)
+    print_comparison(results, settings, paint)
     save_outputs(results, [r.keyword for r in results], settings, args, "demo", paint)
     print()
     print(paint.warn("This was sample data, not live API results."))
