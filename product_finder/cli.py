@@ -434,6 +434,27 @@ def cmd_demo(args: argparse.Namespace, settings: Settings, paint: Painter) -> in
     return 0
 
 
+def cmd_serve(args: argparse.Namespace, settings: Settings, paint: Painter) -> int:
+    """Run the web dashboard.
+
+    The server reloads settings per request through this closure, so editing
+    .env or switching store profiles in the page takes effect immediately --
+    no restart.
+    """
+    from .server import serve
+
+    default_profile = getattr(args, "profile", None)
+
+    def load_settings(profile: str | None) -> Settings:
+        return Settings.load(
+            Path(args.env) if args.env else None,
+            profile=profile or default_profile,
+        )
+
+    serve(load_settings, port=args.port, open_browser=not args.no_open)
+    return 0
+
+
 def print_disclaimer(paint: Painter) -> None:
     print()
     print(paint.dim(
@@ -532,6 +553,17 @@ def build_parser() -> argparse.ArgumentParser:
     cache_cmd.add_argument("--no-color", action="store_true")
     add_profile_argument(cache_cmd)
     cache_cmd.set_defaults(func=cmd_cache)
+
+    serve_cmd = sub.add_parser(
+        "serve", help="open the web dashboard in your browser"
+    )
+    serve_cmd.add_argument("--port", type=int, default=8765,
+                           help="port to listen on (default 8765)")
+    serve_cmd.add_argument("--no-open", action="store_true",
+                           help="do not open a browser window automatically")
+    serve_cmd.add_argument("--no-color", action="store_true")
+    add_profile_argument(serve_cmd)
+    serve_cmd.set_defaults(func=cmd_serve)
 
     demo = sub.add_parser("demo", help="run on bundled sample data, no API keys needed")
     add_common_arguments(demo)

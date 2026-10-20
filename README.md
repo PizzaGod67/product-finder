@@ -23,6 +23,7 @@ terms by pretending to be a browser.
 3. [Step 2: Get your Etsy API key](#3-step-2-get-your-etsy-api-key)
 4. [Step 3: Get your AliExpress API keys](#4-step-3-get-your-aliexpress-api-keys)
 5. [Step 4: Put your keys in the .env file](#5-step-4-put-your-keys-in-the-env-file)
+5b. [The web dashboard](#5b-the-web-dashboard)
 6. [Using the tool](#6-using-the-tool)
 7. [Reading the output](#7-reading-the-output)
 8. [How the numbers are calculated](#8-how-the-numbers-are-calculated)
@@ -260,6 +261,38 @@ python pf.py check --live
 ```
 
 ---
+
+## 5b. The web dashboard
+
+If you would rather click than type:
+
+```bash
+python pf.py serve
+```
+
+That opens `http://127.0.0.1:8765` in your browser. It is the same engine as
+the command line, just driven from a page:
+
+- **Discover** — type one keyword you already have in mind, and it returns the
+  tags real sellers in that market use. Click any of them to add it to your
+  research list. This is the fastest way to find keywords worth checking,
+  and it costs a single API call.
+- **Research** — runs every keyword in the box, ranks them, and shows the full
+  detail for each, with the CSV and HTML report saved and linked.
+- **Store profile** — the dropdown lists your `.env.*` profiles, so you can
+  switch between stores without restarting anything.
+
+Useful flags: `--port 9000` to change the port, `--no-open` to skip opening a
+browser, `--profile clothing` to start on a given store.
+
+> **It is local only.** The server binds to `127.0.0.1`, which means nothing
+> outside your own computer can reach it. Your API keys stay on your machine
+> and are never sent to the browser — the page is only ever told *whether*
+> they are configured. Do not change the bind address unless you understand
+> what you would be exposing: anyone who can reach the page can spend your
+> API quota.
+
+Stop it with Ctrl+C.
 
 ## 6. Using the tool
 
@@ -613,6 +646,7 @@ product_finder/
   table.py               Terminal tables and colour.
   cache.py               The on-disk cache.
   cli.py                 Argument parsing and all terminal output.
+  server.py              The local web dashboard (`pf.py serve`).
   demo.py                Sample data for `pf.py demo`.
 ```
 

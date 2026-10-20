@@ -18,7 +18,7 @@ from .config import Settings
 from .economics import ProfitBreakdown, estimate_profit
 from .etsy import EtsyClient, EtsyListing
 from .http import ApiError
-from .scoring import DemandReport, analyse_keyword, niche_score
+from .scoring import DemandReport, analyse_keyword, niche_score, top_tags
 
 
 @dataclass
@@ -62,6 +62,46 @@ def supplier_confidence(product: AliProduct) -> float:
     orders = min(100.0, (product.orders / 2000.0) * 100.0)
     rating = (product.rating / 5.0) * 100.0 if product.rating else 50.0
     return round(orders * 0.65 + rating * 0.35, 1)
+
+
+def discover_keywords(
+    seed: str,
+    settings: Settings,
+    etsy: EtsyClient,
+    *,
+    limit: int = 12,
+    refresh: bool = False,
+) -> list[tuple[str, int]]:
+    """Suggest related keywords to research, from one seed keyword.
+
+    Etsy sellers tag their own listings, so the tags on the top results for
+    "linen dress" are the exact phrases real sellers in that market use. That
+    makes them far better research candidates than anything you would invent,
+    and it costs one API call.
+
+    Returns (keyword, how many of the sampled listings used it), best first,
+    with the seed itself and near-duplicates of it removed.
+    """
+    listings, _ = etsy.search_active_listings(
+        seed, limit=settings.etsy_limit, refresh=refresh
+    )
+    seed_normalised = " ".join(seed.lower().split())
+
+    suggestions: list[tuple[str, int]] = []
+    for tag, count in top_tags(listings, limit=limit * 3):
+        if tag == seed_normalised:
+            continue
+        # Skip tags that are just the seed with a word bolted on; they return
+        # nearly the same listings and waste an API call.
+        if tag in seed_normalised or seed_normalised in tag:
+            continue
+        # A tag only one listing used is noise, not a market.
+        if count < 2:
+            continue
+        suggestions.append((tag, count))
+        if len(suggestions) >= limit:
+            break
+    return suggestions
 
 
 def research_keyword(
