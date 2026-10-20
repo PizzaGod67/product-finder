@@ -43,6 +43,7 @@ CSV_COLUMNS = [
     "aliexpress_orders",
     "aliexpress_rating",
     "supplier_score",
+    "match_score",
     "assumed_sell_price",
     "revenue",
     "transaction_fee",
@@ -114,6 +115,7 @@ def write_csv(results: list[KeywordResult], path: Path) -> Path:
                         "aliexpress_orders": product.orders,
                         "aliexpress_rating": product.rating,
                         "supplier_score": candidate.supplier_score,
+                        "match_score": candidate.match_score,
                         "assumed_sell_price": profit.etsy_price,
                         "revenue": profit.revenue,
                         "transaction_fee": profit.transaction_fee,
@@ -252,7 +254,8 @@ def _candidate_table(result: KeywordResult) -> str:
             "</tr>"
         )
     return (
-        '<table><thead><tr><th>AliExpress product</th><th class="num">Cost</th>'
+        '<table><thead><tr><th>AliExpress product</th><th class="num">Match</th>'
+        '<th class="num">Cost</th>'
         '<th class="num">Ship</th><th class="num">Landed</th><th class="num">Orders</th>'
         '<th class="num">Rating</th><th class="num">Supplier</th>'
         '<th class="num">Etsy fees</th><th class="num">Profit</th><th class="num">Margin</th>'

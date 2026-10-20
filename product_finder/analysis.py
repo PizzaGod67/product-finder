@@ -18,6 +18,7 @@ from .config import Settings
 from .economics import ProfitBreakdown, estimate_profit
 from .etsy import EtsyClient, EtsyListing
 from .http import ApiError
+from .matching import market_vocabulary, match_score
 from .scoring import DemandReport, analyse_keyword, niche_score, top_tags
 
 
@@ -28,11 +29,28 @@ class Candidate:
     product: AliProduct
     profit: ProfitBreakdown
     supplier_score: float
+    # How much this product looks like what the Etsy market actually sells.
+    match_score: float = 0.0
 
     @property
     def sort_key(self) -> tuple[float, float, float]:
-        # Rank by profit first, then by how trustworthy the supplier looks.
-        return (self.profit.profit, self.supplier_score, self.profit.margin)
+        """Rank by a blend of relevance, profit and supplier trust.
+
+        Profit alone is the wrong ranking: the cheapest AliExpress hit for a
+        keyword is usually the smallest or least comparable version of the
+        product, so sorting by profit reliably floats the worst match to the
+        top. Relevance is weighted highest because a huge margin on the wrong
+        item is not a margin at all.
+        """
+        # Profit is squashed onto 0-1 against a $25 reference so it cannot
+        # dominate; beyond that, more profit stops being the deciding factor.
+        profit_component = max(0.0, min(1.0, self.profit.profit / 25.0))
+        blended = (
+            0.45 * (self.match_score / 100.0)
+            + 0.40 * profit_component
+            + 0.15 * (self.supplier_score / 100.0)
+        )
+        return (round(blended, 4), self.profit.profit, self.supplier_score)
 
 
 @dataclass
@@ -113,6 +131,7 @@ def research_keyword(
     refresh: bool = False,
     min_profit: float = 0.0,
     max_candidates: int = 15,
+    min_match: float = 0.0,
 ) -> KeywordResult:
     """Research a single keyword end to end."""
     listings, listing_count = etsy.search_active_listings(
@@ -170,6 +189,10 @@ def research_keyword(
         )
         return result
 
+    # Build the picture of what this Etsy market sells once, then score every
+    # AliExpress product against it.
+    vocabulary = market_vocabulary(listings)
+
     candidates: list[Candidate] = []
     for product in products:
         if product.price <= 0:
@@ -177,11 +200,15 @@ def research_keyword(
         breakdown = estimate_profit(selling_price, product, settings.fees)
         if breakdown.profit < min_profit:
             continue
+        relevance = match_score(product.title, vocabulary)
+        if relevance < min_match:
+            continue
         candidates.append(
             Candidate(
                 product=product,
                 profit=breakdown,
                 supplier_score=supplier_confidence(product),
+                match_score=relevance,
             )
         )
 
@@ -191,7 +218,14 @@ def research_keyword(
     if not candidates:
         result.warnings.append(
             f"No AliExpress product cleared the minimum profit of "
-            f"${min_profit:.2f} at an Etsy price of ${selling_price:.2f}."
+            f"${min_profit:.2f} at an Etsy price of ${selling_price:.2f}"
+            + (f" and a match score of {min_match:.0f}." if min_match else ".")
+        )
+    elif result.candidates and result.candidates[0].match_score < 35:
+        result.warnings.append(
+            "Even the best AliExpress match only loosely resembles what this "
+            "Etsy market sells. Open the product pages and compare what is "
+            "actually in the box before trusting any profit figure here."
         )
 
     if any(c.product.shipping_is_estimate for c in result.candidates):

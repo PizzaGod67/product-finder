@@ -128,6 +128,7 @@ def run_demo(
     min_profit: float = 0.0,
     max_candidates: int = 15,
     etsy_only: bool = False,
+    min_match: float = 0.0,
 ) -> list[KeywordResult]:
     """Run the full pipeline over the sample niches."""
     etsy = _DemoEtsyClient()
@@ -142,6 +143,7 @@ def run_demo(
                 ali,  # type: ignore[arg-type]
                 min_profit=min_profit,
                 max_candidates=max_candidates,
+                min_match=min_match,
             )
         )
     return results

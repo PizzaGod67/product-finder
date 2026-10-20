@@ -99,6 +99,7 @@ def _result_to_dict(result: KeywordResult, settings: Settings) -> dict[str, Any]
                 "orders": c.product.orders,
                 "rating": c.product.rating,
                 "supplierScore": c.supplier_score,
+                "matchScore": c.match_score,
                 "fees": c.profit.total_fees,
                 "profit": c.profit.profit,
                 "margin": c.profit.margin,
@@ -286,6 +287,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         refresh=bool(body.get("refresh")),
                         min_profit=min_profit,
                         max_candidates=top,
+                        min_match=float(body.get("minMatch") or 0),
                     )
                 )
             except ApiError as exc:
@@ -474,6 +476,10 @@ summary{cursor:pointer;color:var(--muted);font-size:.84rem}
       <input id="minProfit" type="number" value="0" min="0" step="0.5">
     </div>
     <div>
+      <label for="minMatch">Min match (0-100)</label>
+      <input id="minMatch" type="number" value="0" min="0" max="100" step="5">
+    </div>
+    <div>
       <label for="top">Matches per keyword</label>
       <input id="top" type="number" value="15" min="1" max="50">
     </div>
@@ -595,6 +601,7 @@ $("researchBtn").onclick = async () => {
       keywords,
       profile: $("profile").value,
       minProfit: parseFloat($("minProfit").value) || 0,
+      minMatch: parseFloat($("minMatch").value) || 0,
       top: parseInt($("top").value) || 15,
       save: $("save").checked,
       refresh: $("refresh").checked,
@@ -694,6 +701,7 @@ function render(data) {
     if (r.candidates.length) {
       block += "<table><thead><tr><th>AliExpress product</th><th class='num'>Cost</th>" +
         "<th class='num'>Ship</th><th class='num'>Landed</th><th class='num'>Orders</th>" +
+        "<th class='num'>Match</th>" +
         "<th class='num'>Rating</th><th class='num'>Supplier</th><th class='num'>Fees</th>" +
         "<th class='num'>Profit</th><th class='num'>Margin</th></tr></thead><tbody>" +
         r.candidates.map(c =>
@@ -703,6 +711,8 @@ function render(data) {
           "<td class='num'>" + (c.shippingIsEstimate ? "~" : "") + money(c.shipping) + "</td>" +
           "<td class='num'>" + money(c.landedCost) + "</td>" +
           "<td class='num'>" + num(c.orders) + "</td>" +
+          "<td class='num " + (c.matchScore >= 35 ? "good" : "bad") + "'>" +
+            Math.round(c.matchScore) + "</td>" +
           "<td class='num'>" + c.rating.toFixed(1) + "</td>" +
           "<td class='num'>" + Math.round(c.supplierScore) + "</td>" +
           "<td class='num'>" + money(c.fees) + "</td>" +

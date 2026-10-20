@@ -320,6 +320,7 @@ per-keyword detail and see only the comparison table.
 | --- | --- |
 | `--top 10` | Show 10 AliExpress matches per keyword instead of 15 |
 | `--min-profit 5` | Hide any product that would earn under $5 per sale |
+| `--min-match 30` | Hide products that do not resemble the Etsy market |
 | `--etsy-only` | Skip AliExpress entirely — demand research only |
 | `--csv mine.csv` | Choose where the CSV goes |
 | `--html mine.html` | Choose where the HTML report goes |
@@ -415,10 +416,51 @@ for 30 days.
 | **Landed** | Cost + shipping. What the item really costs you. |
 | **Orders** | How many have been sold recently. The best single sign of a reliable supplier. |
 | **Rate** | Rating out of 5. Nearly everything scores 4.5+, so weigh Orders more heavily. |
+| **Match** | 0–100: how much this product resembles what the Etsy market actually sells. See below. |
 | **Supp** | Supplier confidence, 0–100: 65% order volume, 35% rating. |
 | **Fees** | What Etsy takes on that sale. |
 | **Profit** | Your estimated profit per sale. Green means it clears $3 profit *and* 20% margin. |
 | **Margin** | Profit as a percentage of revenue. |
+
+### Finding *the same item* on AliExpress
+
+This is the part to understand clearly, because it is where the tool's help
+ends and yours begins.
+
+**The tool does not match items. It matches keywords.** It searches AliExpress
+for the same words you searched Etsy for. Nothing in either API lets you say
+"find me this exact product" — there is no image search, no reverse lookup, no
+shared product identifier between the two sites.
+
+Left alone, that produces a specific and dangerous failure. Search "wax seal
+kit" on AliExpress and you get 40-piece kits, 3-piece kits, loose wax beads
+and spare brass heads. All honestly named "wax seal kit"; all different
+products. Rank them by profit and **the cheapest one wins — which is usually
+the smallest, least comparable item.** You would be comparing a 3-piece set's
+cost against a 40-piece set's selling price, and the margin would look
+wonderful.
+
+So each product gets a **Match** score. The tool builds a picture of what the
+Etsy market actually sells, from the words its best-performing listings use,
+weighted by favourites — so popular listings count for more — and scores each
+AliExpress title against the ten words that most define that market.
+
+| Score | Reading |
+| --- | --- |
+| 55+ | close match |
+| 35–54 | similar |
+| 20–34 | loose |
+| under 20 | probably a different product |
+
+Ranking blends match (45%), profit (40%) and supplier confidence (15%),
+because a big margin on the wrong item is not a margin. Filter hard with
+`--min-match 30`, or the **Min match** box in the dashboard.
+
+**What it cannot do.** It reads words, not meaning: "no stamp included" counts
+as a hit for "stamp". It cannot see the photographs, which is where you would
+spot that the fabric is wrong. **Treat the score as a way to sort a shortlist,
+then open every page you are serious about and check what is actually in the
+box** — the piece count, the dimensions, the material, the photographs.
 
 ### The saved files
 
@@ -675,6 +717,7 @@ product_finder/
   scoring.py             Demand, competition and niche scoring.
   analysis.py            Orchestrates one keyword end to end.
   report.py              Writes the CSV and the HTML report.
+  matching.py            Scoring how well a product fits the market.
   table.py               Terminal tables and colour.
   cache.py               The on-disk cache.
   cli.py                 Argument parsing and all terminal output.
@@ -712,9 +755,11 @@ prediction of what will sell, and the following gaps are real:
   before committing to anything.**
 - **Prices move.** AliExpress prices change constantly and vary by destination
   country and quantity. Cached data can be up to 24 hours old.
-- **Keyword matching is naive.** The tool trusts both search engines. The
-  cheapest "wax seal kit" on AliExpress may be a 3-piece set while the Etsy
-  listings are 40-piece kits. **Compare what is actually in the box yourself.**
+- **Keyword matching is not item matching.** Neither API offers image search
+  or a shared product identifier, so the tool can only search AliExpress for
+  the same words. The Match score sinks obvious mismatches, but it reads
+  words, not meaning, and cannot see photographs. **Compare what is actually
+  in the box yourself.**
 
 **On the money**
 - **Excluded from the maths:** sales tax and VAT, import duty, currency

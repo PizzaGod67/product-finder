@@ -15,6 +15,7 @@ from .analysis import KeywordResult, research_keyword
 from .cache import Cache
 from .config import Settings, SettingsError
 from .economics import max_sourcing_cost
+from .matching import describe_match
 from .etsy import EtsyClient
 from .http import ApiError
 from .report import default_paths, write_csv, write_html
@@ -123,6 +124,7 @@ def print_keyword_result(
             rows.append([
                 str(index),
                 product.title,
+                f"{candidate.match_score:.0f}",
                 money(product.price),
                 ship,
                 money(product.landed_cost),
@@ -134,16 +136,26 @@ def print_keyword_result(
                 percent(profit.margin),
             ])
         print(render_table(
-            ["#", "AliExpress product", "Cost", "Ship", "Landed", "Orders",
-             "Rate", "Supp", "Fees", "Profit", "Margin"],
+            ["#", "AliExpress product", "Match", "Cost", "Ship", "Landed",
+             "Orders", "Rate", "Supp", "Fees", "Profit", "Margin"],
             rows,
-            max_widths=[3, 46, 9, 9, 9, 8, 5, 5, 8, 12, 7],
-            align="rlrrrrrrrrr",
+            max_widths=[3, 42, 6, 9, 9, 9, 8, 5, 5, 8, 12, 7],
+            align="rlrrrrrrrrrr",
         ))
         best = result.best
         if best:
             print()
-            print(paint.dim("  Best match: ") + best.product.url)
+            quality = describe_match(best.match_score)
+            tint = paint.good if best.match_score >= 35 else paint.bad
+            print(
+                paint.dim("  Best match ")
+                + tint(f"({quality}, {best.match_score:.0f}/100): ")
+                + best.product.url
+            )
+            print(paint.dim(
+                "  Match = how much the product title resembles what this Etsy\n"
+                "  market sells. Always open the page and check what is in the box."
+            ))
 
     if demand.top_tags:
         tags = ", ".join(f"{tag} ({count})" for tag, count in demand.top_tags[:8])
@@ -255,6 +267,7 @@ def run_research(
                     refresh=args.refresh,
                     min_profit=args.min_profit,
                     max_candidates=args.top,
+                    min_match=args.min_match,
                 )
             )
         except ApiError as exc:
@@ -439,6 +452,7 @@ def cmd_demo(args: argparse.Namespace, settings: Settings, paint: Painter) -> in
         min_profit=args.min_profit,
         max_candidates=args.top,
         etsy_only=args.etsy_only,
+        min_match=args.min_match,
     )
     for result in results:
         print_keyword_result(result, settings, paint)
@@ -490,6 +504,9 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> None:
                         help="how many AliExpress matches to show per keyword (default 15)")
     parser.add_argument("--min-profit", type=float, default=0.0, metavar="USD",
                         help="hide matches earning less than this per sale")
+    parser.add_argument("--min-match", type=float, default=0.0, metavar="SCORE",
+                        help="hide AliExpress products scoring below this on "
+                             "resemblance to the Etsy market (0-100; try 30)")
     parser.add_argument("--etsy-only", action="store_true",
                         help="skip AliExpress entirely (demand research only)")
     parser.add_argument("--no-cache", action="store_true",
