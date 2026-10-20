@@ -467,6 +467,22 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--no-save", action="store_true",
                         help="print to the terminal only, write no files")
     parser.add_argument("--no-color", action="store_true", help="disable coloured output")
+    add_profile_argument(parser)
+
+
+def add_profile_argument(parser: argparse.ArgumentParser) -> None:
+    """Allow --profile either before or after the subcommand.
+
+    `SUPPRESS` is the trick: without it, a subcommand's unset --profile would
+    overwrite one given before the subcommand with None. With it, the
+    attribute is simply absent unless the user typed it, so whichever position
+    they used survives.
+    """
+    parser.add_argument(
+        "--profile", metavar="NAME", default=argparse.SUPPRESS,
+        help="load per-store settings from .env.NAME on top of .env "
+             "(e.g. --profile clothing). Reports go to reports/NAME/.",
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -489,6 +505,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=f"product-finder {__version__}")
     parser.add_argument("--env", metavar="PATH", help="use a different .env file")
+    add_profile_argument(parser)
     sub = parser.add_subparsers(dest="command", required=True)
 
     search = sub.add_parser("search", help="research one keyword")
@@ -507,11 +524,13 @@ def build_parser() -> argparse.ArgumentParser:
     check.add_argument("--live", action="store_true",
                        help="make one real API call to each service to prove the keys work")
     check.add_argument("--no-color", action="store_true")
+    add_profile_argument(check)
     check.set_defaults(func=cmd_check)
 
     cache_cmd = sub.add_parser("cache", help="inspect or clear the local cache")
     cache_cmd.add_argument("--clear", action="store_true", help="delete all cached responses")
     cache_cmd.add_argument("--no-color", action="store_true")
+    add_profile_argument(cache_cmd)
     cache_cmd.set_defaults(func=cmd_cache)
 
     demo = sub.add_parser("demo", help="run on bundled sample data, no API keys needed")
@@ -527,7 +546,10 @@ def main(argv: list[str] | None = None) -> int:
     paint = Painter(enabled=False if getattr(args, "no_color", False) else None)
 
     try:
-        settings = Settings.load(Path(args.env) if args.env else None)
+        settings = Settings.load(
+            Path(args.env) if args.env else None,
+            profile=getattr(args, "profile", None),
+        )
         return args.func(args, settings, paint)
     except SettingsError as exc:
         print(paint.bad("Configuration problem:"), file=sys.stderr)

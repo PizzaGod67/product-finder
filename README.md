@@ -27,6 +27,7 @@ terms by pretending to be a browser.
 7. [Reading the output](#7-reading-the-output)
 8. [How the numbers are calculated](#8-how-the-numbers-are-calculated)
 9. [Changing the settings](#9-changing-the-settings)
+9b. [Running more than one store](#9b-running-more-than-one-store)
 10. [The cache](#10-the-cache)
 11. [Troubleshooting](#11-troubleshooting)
 12. [How the code is organised](#12-how-the-code-is-organised)
@@ -470,6 +471,49 @@ python pf.py check
 ```
 
 ---
+
+## 9b. Running more than one store
+
+The tool is **keyword-agnostic** — nothing in it is specific to craft
+supplies. But the scoring thresholds are category-specific, so a second store
+needs its own calibration rather than its own copy of the tool.
+
+Use a **profile**: a file called `.env.<name>` holding only what differs for
+that store.
+
+```bash
+python pf.py compare "linen jumpsuit" "nursing dress" --profile clothing
+```
+
+- `.env.clothing` is read **first**, then `.env` fills in everything it did
+  not set — so your **API keys stay in `.env` only**. Never copy keys into a
+  profile.
+- Reports go to `reports/clothing/` automatically, keeping stores apart.
+- `--profile` works before or after the subcommand.
+- Every `.env.*` file is gitignored, so profiles never reach GitHub.
+
+### Why categories need different numbers
+
+Measured on real searches, clothing is about **ten times more crowded** than
+craft supplies:
+
+| Keyword | Competing listings |
+| --- | --- |
+| wax seal kit (craft) | 10,884 |
+| sealing wax sticks (craft) | 1,132 |
+| crochet top (apparel) | 137,474 |
+| linen dress (apparel) | 118,180 |
+
+With the craft-supply defaults every clothing keyword scored **0** on
+competition, so the ranking could not tell them apart at all. The bundled
+`.env.clothing` raises `COMPETITION_LISTINGS_HIGH` to 400,000 and the
+saturation flag to 80,000, which spreads apparel keywords across the range
+again.
+
+**The lesson generalises.** When you start a new category, run three or four
+keywords you already know are big, see where they land, and move the
+thresholds until the scores spread out. If everything scores 100 or everything
+scores 0, the dial is wrong, not the niche.
 
 ## 10. The cache
 

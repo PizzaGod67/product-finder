@@ -1,5 +1,10 @@
-# Your secrets. Never commit this.
+# Your secrets. Never commit these.
+# `.env.*` covers per-store profiles like .env.clothing, which would
+# otherwise slip past a bare `.env` rule and publish your keys.
 .env
+.env.*
+# ...but the placeholder template is safe to share, so keep tracking it.
+!.env.example
 
 # Cached API responses and generated reports
 .cache/

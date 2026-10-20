@@ -225,8 +225,39 @@ class Settings:
     thresholds: "Thresholds" = field(default_factory=lambda: Thresholds())
 
     @classmethod
-    def load(cls, env_path: Path | None = None) -> "Settings":
+    def load(
+        cls, env_path: Path | None = None, profile: str | None = None
+    ) -> "Settings":
+        """Load settings, optionally layering a per-store profile on top.
+
+        A profile is a file like `.env.clothing` holding only what differs for
+        that store -- its scoring calibration, its fee rates, its own reports
+        folder. Shared things, above all your API keys, stay in `.env` so they
+        live in exactly one place.
+
+        The profile is read FIRST and the base `.env` second. `load_env` uses
+        `setdefault`, so whatever the profile set stays put and the base only
+        fills the gaps. That is what makes the profile win.
+        """
+        if profile:
+            profile_path = PROJECT_ROOT / f".env.{profile}"
+            if not profile_path.is_file():
+                raise SettingsError(
+                    f"No profile file at {profile_path.name}.\n"
+                    f"  Create it with the settings specific to that store, e.g.\n"
+                    f"    OUTPUT_DIR=reports/{profile}\n"
+                    f"    COMPETITION_LISTINGS_HIGH=400000\n"
+                    f"  Keep your API keys in .env -- profiles inherit from it."
+                )
+            load_env(profile_path)
+
         load_env(env_path)
+
+        # Unless the profile said otherwise, keep each store's reports apart so
+        # one store's CSVs do not pile up in another's folder.
+        if profile and not os.environ.get("OUTPUT_DIR"):
+            os.environ["OUTPUT_DIR"] = str(PROJECT_ROOT / "reports" / profile)
+
         return cls(
             etsy_api_key=_credential("ETSY_API_KEY"),
             etsy_shared_secret=_credential("ETSY_SHARED_SECRET"),
