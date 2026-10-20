@@ -52,6 +52,7 @@ def _fake_etsy_payload(keyword: str, seed: int) -> list[dict]:
                 "quantity": rng.randint(1, 400),
                 "tags": rng.sample(DEMO_TAGS, k=rng.randint(4, 8)),
                 "url": f"https://www.etsy.com/listing/{1_000_000 + seed * 1000 + index}",
+                "listing_type": "physical",
                 "taxonomy_id": rng.choice([1, 1, 1, 1, 1, 1, 2, 3]),
                 "shop_id": 500 + shops.index(shop),
                 "Shop": {"shop_id": 500 + shops.index(shop), "shop_name": shop},

@@ -89,6 +89,7 @@ def discover_keywords(
     *,
     limit: int = 12,
     refresh: bool = False,
+    product_type: str = "physical",
 ) -> list[tuple[str, int]]:
     """Suggest related keywords to research, from one seed keyword.
 
@@ -103,6 +104,9 @@ def discover_keywords(
     listings, _ = etsy.search_active_listings(
         seed, limit=settings.etsy_limit, refresh=refresh
     )
+    # Without this, seeding a garment keyword returns a wall of sewing-pattern
+    # tags, because that is what Etsy ranks for clothing words.
+    listings = filter_listings(listings, product_type)
     seed_normalised = " ".join(seed.lower().split())
 
     suggestions: list[tuple[str, int]] = []
@@ -122,6 +126,26 @@ def discover_keywords(
     return suggestions
 
 
+def filter_listings(
+    listings: list[EtsyListing], product_type: str
+) -> list[EtsyListing]:
+    """Keep only physical goods, only digital downloads, or everything.
+
+    Etsy is a craft marketplace, so a search for a garment returns a great
+    many PDF sewing patterns alongside actual clothes -- for "womens pants",
+    47 of the first 100 listings. Those are a different business with
+    different economics, and leaving them in distorts the price, the demand
+    and the competition all at once.
+
+    `both` listings (sold as physical *and* download) count as physical.
+    """
+    if product_type == "physical":
+        return [item for item in listings if item.listing_type != "download"]
+    if product_type == "digital":
+        return [item for item in listings if item.listing_type in ("download", "both")]
+    return listings
+
+
 def research_keyword(
     keyword: str,
     settings: Settings,
@@ -132,11 +156,23 @@ def research_keyword(
     min_profit: float = 0.0,
     max_candidates: int = 15,
     min_match: float = 0.0,
+    product_type: str = "physical",
 ) -> KeywordResult:
     """Research a single keyword end to end."""
     listings, listing_count = etsy.search_active_listings(
         keyword, limit=settings.etsy_limit, refresh=refresh
     )
+
+    sampled_before = len(listings)
+    listings = filter_listings(listings, product_type)
+    excluded = sampled_before - len(listings)
+    if excluded and sampled_before:
+        # Etsy's own total still counts the listings we just dropped, so scale
+        # it by the share that survived. It is an estimate from a 100-listing
+        # sample, not a second count, and is labelled as such everywhere.
+        kept_share = len(listings) / sampled_before
+        listing_count = max(len(listings), round(listing_count * kept_share))
+
     # The category tree is a nicety: if that call fails we still want the
     # search itself to succeed, just without the category breakdown.
     try:
@@ -148,6 +184,20 @@ def research_keyword(
         keyword, listings, listing_count, settings.thresholds, taxonomy
     )
     result = KeywordResult(keyword=keyword, demand=demand, listings=listings)
+    if excluded:
+        label = "digital downloads" if product_type == "physical" else "physical goods"
+        result.warnings.append(
+            f"Excluded {excluded} of the {sampled_before} sampled listings as "
+            f"{label}. Competing listings is therefore an estimate, scaled by "
+            f"the {len(listings)}/{sampled_before} that remained."
+        )
+    if not listings and sampled_before:
+        result.warnings.append(
+            f"Every sampled listing for {keyword!r} was filtered out as the "
+            f"wrong product type. On Etsy that usually means this keyword is "
+            "almost entirely digital downloads -- add --include-digital to see "
+            "them."
+        )
     # Start from the Etsy-only view. If sourcing data arrives below, this gets
     # recalculated; if it does not, this remains the honest answer rather than
     # the 0 an un-set score would leave behind.

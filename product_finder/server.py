@@ -241,7 +241,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
         settings = self._load_settings(body.get("profile") or None)
         etsy, _ = self._clients(settings, bool(body.get("noCache")))
-        found = discover_keywords(seed, settings, etsy)
+        product_type = str(body.get("productType") or "physical")
+        if product_type not in ("all", "physical", "digital"):
+            product_type = "all"
+        found = discover_keywords(seed, settings, etsy, product_type=product_type)
         self._send_json(
             200,
             {
@@ -274,6 +277,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
         except (TypeError, ValueError):
             top = 15
 
+        product_type = str(body.get("productType") or "physical")
+        if product_type not in ("all", "physical", "digital"):
+            product_type = "all"
+
         results: list[KeywordResult] = []
         errors: list[str] = []
         for keyword in keywords:
@@ -288,6 +295,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         min_profit=min_profit,
                         max_candidates=top,
                         min_match=float(body.get("minMatch") or 0),
+                        product_type=product_type,
                     )
                 )
             except ApiError as exc:
@@ -476,6 +484,14 @@ summary{cursor:pointer;color:var(--muted);font-size:.84rem}
       <input id="minProfit" type="number" value="0" min="0" step="0.5">
     </div>
     <div>
+      <label for="productType">Product type</label>
+      <select id="productType">
+        <option value="physical">Physical goods only</option>
+        <option value="all">Everything</option>
+        <option value="digital">Digital downloads only</option>
+      </select>
+    </div>
+    <div>
       <label for="minMatch">Min match (0-100)</label>
       <input id="minMatch" type="number" value="0" min="0" max="100" step="5">
     </div>
@@ -570,7 +586,8 @@ $("discoverBtn").onclick = async () => {
   clearMessages();
   setBusy(true, "asking Etsy what this market calls itself...");
   try {
-    const data = await api("/api/discover", {seed, profile: $("profile").value});
+    const data = await api("/api/discover", {seed, profile: $("profile").value,
+      productType: $("productType").value});
     const chips = $("chips");
     if (!data.suggestions.length) {
       message("No related tags found. Try a broader starting keyword.");
@@ -602,6 +619,7 @@ $("researchBtn").onclick = async () => {
       profile: $("profile").value,
       minProfit: parseFloat($("minProfit").value) || 0,
       minMatch: parseFloat($("minMatch").value) || 0,
+      productType: $("productType").value,
       top: parseInt($("top").value) || 15,
       save: $("save").checked,
       refresh: $("refresh").checked,

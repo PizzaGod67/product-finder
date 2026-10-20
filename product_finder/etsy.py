@@ -47,6 +47,12 @@ class EtsyListing:
     # Etsy's own category for this listing. The single most useful field for
     # telling whether a keyword is really about what you think it is.
     taxonomy_id: int = 0
+    # "physical", "download" or "both". On Etsy this matters enormously:
+    # searches for garments are heavily populated by PDF sewing patterns,
+    # which are downloads and a completely different business.
+    listing_type: str = "physical"
+    # Etsy's own "this is a craft supply" marker.
+    is_supply: bool = False
 
     @classmethod
     def from_api(cls, raw: dict[str, Any], shop_names: dict[int, str]) -> "EtsyListing":
@@ -80,6 +86,8 @@ class EtsyListing:
             quantity=int(raw.get("quantity") or 0),
             views=int(raw.get("views") or 0),
             taxonomy_id=int(raw.get("taxonomy_id") or 0),
+            listing_type=str(raw.get("listing_type") or "physical").lower(),
+            is_supply=bool(raw.get("is_supply")),
         )
 
 

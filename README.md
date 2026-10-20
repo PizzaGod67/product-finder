@@ -321,6 +321,8 @@ per-keyword detail and see only the comparison table.
 | `--top 10` | Show 10 AliExpress matches per keyword instead of 15 |
 | `--min-profit 5` | Hide any product that would earn under $5 per sale |
 | `--min-match 30` | Hide products that do not resemble the Etsy market |
+| `--include-digital` | Count PDF patterns and printables too (off by default) |
+| `--digital-only` | Count only digital downloads |
 | `--etsy-only` | Skip AliExpress entirely — demand research only |
 | `--csv mine.csv` | Choose where the CSV goes |
 | `--html mine.html` | Choose where the HTML report goes |
@@ -377,6 +379,42 @@ python pf.py compare "wax seal kit" "wax seal stamp" "sealing wax sticks" --brie
 - **`mixed categories`** — the listings behind this keyword are spread across
   different Etsy departments, so the scores are not about any one product
   type. See below.
+
+### Digital downloads are excluded by default
+
+Etsy is a craft marketplace, so a search for a garment comes back full of
+**PDF sewing patterns**. For `womens pants`, 47 of the first 100 listings were
+downloads, not clothes.
+
+That is not a minor contamination — patterns sell for about $10 and the
+garments themselves for about $90, so blending them corrupts every number at
+once:
+
+| `womens pants` | Everything | Physical only (default) |
+| --- | --- | --- |
+| **Typical price** | **$20.00** | **$89.00** |
+| Price range | $9.95–$98.00 | $49.00–$135.00 |
+| Avg favourites | 615 | 212 |
+| Competing listings | 333,471 | 176,740 |
+| Biggest category | Patterns 46% | Clothing > Pants 47% |
+
+A $20 median would have given you a break-even budget of about $17.75 for a
+product that actually sells for $89. Everything downstream would have been
+wrong.
+
+So **physical goods only is the default**, everywhere — searches, comparisons
+and keyword discovery. The effect on discovery is just as stark: seeding
+`womens pants` returned 7 pattern tags out of 10 before, and 0 after.
+
+- `--include-digital` — count downloads too
+- `--digital-only` — count *only* downloads (if selling printables is your
+  actual business)
+- In the dashboard, the **Product type** dropdown
+
+When listings are excluded, "Competing" becomes an estimate: Etsy's total
+scaled by the share of the sample that survived. The tool says so in a note
+each time. Some printed-and-mailed patterns are genuinely physical, which is
+why a few percent usually remain.
 
 ### "What these listings actually are"
 

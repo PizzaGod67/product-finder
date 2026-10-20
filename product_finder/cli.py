@@ -268,6 +268,7 @@ def run_research(
                     min_profit=args.min_profit,
                     max_candidates=args.top,
                     min_match=args.min_match,
+                    product_type=args.product_type,
                 )
             )
         except ApiError as exc:
@@ -507,6 +508,19 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--min-match", type=float, default=0.0, metavar="SCORE",
                         help="hide AliExpress products scoring below this on "
                              "resemblance to the Etsy market (0-100; try 30)")
+    # Physical is the default because this tool exists to help you source and
+    # resell real objects. Etsy searches for garments come back roughly half
+    # PDF sewing patterns, which are a different business at a different price
+    # point, and blending the two silently corrupts every number.
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--include-digital", dest="product_type",
+                       action="store_const", const="all",
+                       help="also count digital downloads (PDF patterns, "
+                            "printables), which are excluded by default")
+    group.add_argument("--digital-only", dest="product_type",
+                       action="store_const", const="digital",
+                       help="count ONLY digital downloads")
+    parser.set_defaults(product_type="physical")
     parser.add_argument("--etsy-only", action="store_true",
                         help="skip AliExpress entirely (demand research only)")
     parser.add_argument("--no-cache", action="store_true",
