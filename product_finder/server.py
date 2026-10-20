@@ -18,6 +18,7 @@ Still standard library only: `http.server` is built into Python.
 from __future__ import annotations
 
 import json
+import sys
 import threading
 import webbrowser
 from functools import partial
@@ -26,6 +27,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlsplit
 
+from . import __version__
 from .aliexpress import AliExpressClient
 from .analysis import KeywordResult, discover_keywords, research_keyword
 from .cache import Cache
@@ -122,6 +124,23 @@ def _result_to_dict(result: KeywordResult, settings: Settings) -> dict[str, Any]
     }
 
 
+class _DashboardServer(ThreadingHTTPServer):
+    """ThreadingHTTPServer, minus one very confusing Windows behaviour.
+
+    http.server sets SO_REUSEADDR, which on Unix only avoids the TIME_WAIT
+    delay on restart. On Windows it does something else entirely: it lets a
+    second process bind a port another process is already listening on. Both
+    servers then "start" successfully and which one answers a given request is
+    undefined -- so updating the tool and restarting appears to change
+    nothing, because the old copy is still serving the browser.
+
+    Refusing the reuse on Windows turns that silent confusion into a clear
+    "port already in use" message naming the fix.
+    """
+
+    allow_reuse_address = sys.platform != "win32"
+
+
 class DashboardHandler(BaseHTTPRequestHandler):
     """Routes requests. One instance per request, as http.server does it."""
 
@@ -143,6 +162,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
+        # The dashboard is served inline from this file, so after you update
+        # the tool the browser must not hand back the page it saw last time.
+        # Without this, a restarted server still looks unchanged.
+        self.send_header("Cache-Control", "no-store, must-revalidate")
         # This page talks only to itself; refuse to be framed by anything.
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -209,7 +232,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
         except SettingsError:
             configured = {"etsy": False, "aliexpress": False}
         self._send_json(
-            200, {"profiles": available_profiles(), "configured": configured}
+            200,
+            {
+                "profiles": available_profiles(),
+                "configured": configured,
+                "version": __version__,
+                "features": ["productType", "minMatch", "categoryMix"],
+            },
         )
 
     def _clients(self, settings: Settings, no_cache: bool):
@@ -368,10 +397,26 @@ def serve(
 ) -> None:
     """Start the dashboard and block until Ctrl+C."""
     handler = partial(DashboardHandler, settings_loader=settings_loader)
-    httpd = ThreadingHTTPServer((host, port), handler)
+    try:
+        httpd = _DashboardServer((host, port), handler)
+    except OSError as exc:
+        # The classic trap: an older copy is still holding the port, this one
+        # dies, and the browser keeps showing the old version -- so an update
+        # looks like it did nothing. Say so plainly instead of a stack trace.
+        raise SettingsError(
+            f"Port {port} is already in use.\n"
+            "  An older dashboard is probably still running. Either press "
+            "Ctrl+C\n"
+            "  in the terminal running it, or start this one on another port:\n"
+            f"    python pf.py serve --port {port + 1}\n"
+            "  Until the old one stops, your browser will keep showing the\n"
+            f"  version it started with.\n"
+            f"  (the system said: {exc})"
+        ) from None
+
     url = f"http://{host}:{httpd.server_address[1]}"
 
-    print(f"product-finder dashboard running at {url}")
+    print(f"product-finder dashboard {__version__} running at {url}")
     print("  Only your computer can reach it. Press Ctrl+C to stop.")
     if open_browser:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
@@ -470,6 +515,7 @@ summary{cursor:pointer;color:var(--muted);font-size:.84rem}
 <header>
   <h1>product-finder</h1>
   <span class="muted" id="status"></span>
+  <span class="muted" id="version" style="margin-left:auto;font-size:.76rem"></span>
 </header>
 <p class="sub">Etsy demand research and AliExpress sourcing, from the official APIs.</p>
 
@@ -782,6 +828,15 @@ function stat(label, value) {
   try {
     const res = await fetch("/api/profiles");
     const data = await res.json();
+    $("version").textContent = "v" + (data.version || "?");
+    // If the page in the browser predates the server it is talking to, the
+    // controls below will be missing and nothing will behave as documented.
+    const missing = (data.features || []).filter(f => !document.getElementById(f));
+    if (missing.length) {
+      message("This page is an old cached copy (the server has features this " +
+        "page does not: " + missing.join(", ") + "). Press Ctrl+Shift+R to " +
+        "reload it properly.", true);
+    }
     data.profiles.forEach(p => {
       const opt = document.createElement("option");
       opt.value = p; opt.textContent = p;
