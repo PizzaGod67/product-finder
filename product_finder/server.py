@@ -74,6 +74,11 @@ def _result_to_dict(result: KeywordResult, settings: Settings) -> dict[str, Any]
         "priceP75": demand.price_p75,
         "flags": demand.flags,
         "topTags": [{"tag": t, "count": c} for t, c in demand.top_tags],
+        "categoryMix": [
+            {"label": label, "share": share} for label, share in demand.category_mix
+        ],
+        "mainCategory": demand.main_category,
+        "mainCategoryShare": demand.main_category_share,
         "warnings": result.warnings,
         "breakEven": max_sourcing_cost(demand.typical_price, settings.fees)
         if demand.typical_price > 0
@@ -601,7 +606,8 @@ $("researchBtn").onclick = async () => {
 
 function flagChip(f) {
   const cls = f === f.toUpperCase() ? "hit"
-    : ["saturated","dominated by few shops","low price ceiling"].includes(f) ? "risk" : "";
+    : ["saturated","dominated by few shops","low price ceiling",
+       "mixed categories"].includes(f) ? "risk" : "";
   return '<span class="chip ' + cls + '">' + esc(f) + "</span>";
 }
 
@@ -655,6 +661,19 @@ function render(data) {
       stat("Demand", Math.round(r.demandScore) + "/100") +
       stat("Low competition", Math.round(r.competitionScore) + "/100") +
       "</div><div style='margin-top:10px'>" + r.flags.map(flagChip).join("") + "</div>";
+
+    if (r.categoryMix.length) {
+      block += '<p class="muted" style="margin:12px 0 0"><strong>What these ' +
+        "listings actually are:</strong> " +
+        r.categoryMix.slice(0, 4).map(c =>
+          esc(c.label) + " " + Math.round(c.share) + "%").join(" &middot; ") + "</p>";
+      if (r.flags.includes("mixed categories")) {
+        block += '<div class="note err">Only ' + Math.round(r.mainCategoryShare) +
+          "% of this keyword's listings are " + esc(r.mainCategory) +
+          ". The scores describe that whole mixture, not one product type &mdash; " +
+          "check it is the market you mean before acting on them.</div>";
+      }
+    }
 
     r.warnings.forEach(w => { block += '<div class="note">' + esc(w) + "</div>"; });
 

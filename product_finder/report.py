@@ -31,6 +31,9 @@ CSV_COLUMNS = [
     "etsy_price_p25",
     "etsy_price_p75",
     "flags",
+    "main_category",
+    "main_category_share",
+    "category_mix",
     "aliexpress_title",
     "aliexpress_url",
     "aliexpress_price",
@@ -86,6 +89,11 @@ def write_csv(results: list[KeywordResult], path: Path) -> Path:
                 "etsy_price_p25": demand.price_p25,
                 "etsy_price_p75": demand.price_p75,
                 "flags": "; ".join(demand.flags),
+                "main_category": demand.main_category,
+                "main_category_share": demand.main_category_share,
+                "category_mix": "; ".join(
+                    f"{label} {share:.0f}%" for label, share in demand.category_mix
+                ),
             }
             if not result.candidates:
                 writer.writerow(shared)
@@ -294,6 +302,22 @@ def write_html(
         )
         warnings = "".join(f'<p class="note">{_esc(w)}</p>' for w in result.warnings)
         tags = ", ".join(f"{_esc(t)} ({n})" for t, n in demand.top_tags[:10])
+        categories = ""
+        if demand.category_mix:
+            listed = " &middot; ".join(
+                f"{_esc(label)} {share:.0f}%"
+                for label, share in demand.category_mix[:4]
+            )
+            categories = (
+                f'<p class="tags"><strong>What these listings actually are:</strong> '
+                f"{listed}</p>"
+            )
+            if "mixed categories" in demand.flags:
+                categories += (
+                    f'<p class="note">Only {demand.main_category_share:.0f}% of this '
+                    f"keyword's listings are {_esc(demand.main_category)}. The scores "
+                    "describe that whole mixture, not one product type.</p>"
+                )
         blocks.append(
             f"""<div class="card">
   <div class="kw"><h2>{_esc(result.keyword)}</h2>
@@ -310,6 +334,7 @@ def write_html(
     <div>Low competition<b>{demand.competition_score:.0f}/100</b></div>
   </div>
   <div class="flags">{flags}</div>
+  {categories}
   {warnings}
   {_candidate_table(result)}
   {f'<p class="tags"><strong>Common tags:</strong> {tags}</p>' if tags else ''}

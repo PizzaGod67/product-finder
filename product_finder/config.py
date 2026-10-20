@@ -180,6 +180,9 @@ class Thresholds:
     low_competition_listings: int = 2500
     high_favorites_average: float = 150.0
     saturated_listings: int = 10000
+    # If the biggest Etsy category holds less than this percentage of the
+    # sampled listings, the keyword spans product types and gets flagged.
+    mixed_category_share: float = 45.0
 
     @classmethod
     def from_env(cls) -> "Thresholds":
@@ -191,6 +194,7 @@ class Thresholds:
             low_competition_listings=_env_int("LOW_COMPETITION_LISTINGS", 2500),
             high_favorites_average=_env_float("HIGH_FAVORITES_AVERAGE", 150.0),
             saturated_listings=_env_int("SATURATED_LISTINGS", 10000),
+            mixed_category_share=_env_float("MIXED_CATEGORY_SHARE", 45.0),
         )
 
 

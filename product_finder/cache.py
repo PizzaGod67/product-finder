@@ -34,15 +34,23 @@ class Cache:
         safe_ns = "".join(c if c.isalnum() or c in "-_" else "_" for c in namespace)
         return self.directory / f"{safe_ns}-{digest}.json"
 
-    def get(self, namespace: str, key: dict[str, Any]) -> Any | None:
-        """Return the cached value, or None if absent/expired/unreadable."""
+    def get(
+        self, namespace: str, key: dict[str, Any], ttl_hours: float | None = None
+    ) -> Any | None:
+        """Return the cached value, or None if absent/expired/unreadable.
+
+        `ttl_hours` overrides the default lifetime for this one lookup, which
+        suits data that barely changes -- Etsy's category tree, say, is worth
+        keeping for weeks rather than re-downloading daily.
+        """
         if not self.enabled:
             return None
         path = self._path(namespace, key)
         if not path.is_file():
             self.misses += 1
             return None
-        if self.ttl_seconds and (time.time() - path.stat().st_mtime) > self.ttl_seconds:
+        ttl = self.ttl_seconds if ttl_hours is None else max(0.0, ttl_hours) * 3600.0
+        if ttl and (time.time() - path.stat().st_mtime) > ttl:
             self.misses += 1
             return None
         try:

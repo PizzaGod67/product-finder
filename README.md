@@ -373,6 +373,38 @@ python pf.py compare "wax seal kit" "wax seal stamp" "sealing wax sticks" --brie
 - `dominated by few shops` — a handful of sellers hold the sample. Could mean an
   entrenched brand, or a gap nobody has noticed.
 - `low price ceiling` — median under $8, so fees eat most of the margin.
+- **`mixed categories`** — the listings behind this keyword are spread across
+  different Etsy departments, so the scores are not about any one product
+  type. See below.
+
+### "What these listings actually are"
+
+Every result shows the Etsy categories the sampled listings really sit in.
+This is the check that stops you researching the wrong market.
+
+A worked example. `downtown girl` looks like a clothing keyword and scores
+well — 5,153 competitors, 82/100 on low competition. But:
+
+```
+Clothing > T-shirts 24%  ·  Art & Collectibles > Digital Prints 15%
+Paper & Party Supplies > Stickers 11%  ·  Clothing > Sweatshirts 10%
+```
+
+Only **44%** of it is clothing at all. The rest is stickers, prints, phone
+cases and wall art. The demand and competition numbers are perfectly real —
+they are just not about a clothing market. It is an *aesthetic* term, and
+aesthetics sell as merch across many departments.
+
+Compare `y2k baby tee`, which splits across T-shirts, Tops & Tees and Crop
+Tops — three different categories, but over 90% of one department. That is a
+coherent market, so it is **not** flagged.
+
+The flag judges the **top-level department**, not the leaf category, which is
+why the second case passes. Tune the bar with `MIXED_CATEGORY_SHARE`
+(default 45).
+
+Category names come from Etsy's own seller taxonomy, fetched once and cached
+for 30 days.
 
 ### The AliExpress table
 

@@ -118,7 +118,16 @@ def research_keyword(
     listings, listing_count = etsy.search_active_listings(
         keyword, limit=settings.etsy_limit, refresh=refresh
     )
-    demand = analyse_keyword(keyword, listings, listing_count, settings.thresholds)
+    # The category tree is a nicety: if that call fails we still want the
+    # search itself to succeed, just without the category breakdown.
+    try:
+        taxonomy = etsy.taxonomy_names()
+    except ApiError:
+        taxonomy = None
+
+    demand = analyse_keyword(
+        keyword, listings, listing_count, settings.thresholds, taxonomy
+    )
     result = KeywordResult(keyword=keyword, demand=demand, listings=listings)
     # Start from the Etsy-only view. If sourcing data arrives below, this gets
     # recalculated; if it does not, this remains the honest answer rather than

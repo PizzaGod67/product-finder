@@ -52,6 +52,7 @@ def _fake_etsy_payload(keyword: str, seed: int) -> list[dict]:
                 "quantity": rng.randint(1, 400),
                 "tags": rng.sample(DEMO_TAGS, k=rng.randint(4, 8)),
                 "url": f"https://www.etsy.com/listing/{1_000_000 + seed * 1000 + index}",
+                "taxonomy_id": rng.choice([1, 1, 1, 1, 1, 1, 2, 3]),
                 "shop_id": 500 + shops.index(shop),
                 "Shop": {"shop_id": 500 + shops.index(shop), "shop_name": shop},
             }
@@ -92,6 +93,11 @@ class _DemoEtsyClient:
 
     def __init__(self, seed_base: int = 1):
         self.seed_base = seed_base
+
+    def taxonomy_names(self, *, refresh=False):
+        return {1: "Craft Supplies & Tools > Stamping",
+                2: "Paper & Party Supplies > Stickers",
+                3: "Home & Living > Wall Decor"}
 
     def search_active_listings(self, keyword, limit=100, *, refresh=False, sort_on="score"):
         seed = self.seed_base + abs(hash(keyword)) % 997

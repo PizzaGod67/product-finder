@@ -44,6 +44,9 @@ class EtsyListing:
     url: str = ""
     quantity: int = 0
     views: int = 0
+    # Etsy's own category for this listing. The single most useful field for
+    # telling whether a keyword is really about what you think it is.
+    taxonomy_id: int = 0
 
     @classmethod
     def from_api(cls, raw: dict[str, Any], shop_names: dict[int, str]) -> "EtsyListing":
@@ -76,6 +79,7 @@ class EtsyListing:
             url=raw.get("url") or f"https://www.etsy.com/listing/{raw.get('listing_id')}",
             quantity=int(raw.get("quantity") or 0),
             views=int(raw.get("views") or 0),
+            taxonomy_id=int(raw.get("taxonomy_id") or 0),
         )
 
 
@@ -161,6 +165,43 @@ class EtsyClient:
             payload = {"count": 0, "results": []}
         self.cache.set("etsy", cache_key, payload)
         return payload
+
+
+    def taxonomy_names(self, *, refresh: bool = False) -> dict[int, str]:
+        """Map Etsy's taxonomy_id to a readable category label.
+
+        Etsy publishes its whole seller category tree on an API-key-only
+        endpoint. It is one call and it barely ever changes, so we cache it for
+        30 days rather than the usual 24 hours.
+
+        Labels are shortened to "Top > Leaf" -- the full path is often five
+        levels deep ("Clothing > Gender-Neutral Adult Clothing > Tops & Tees >
+        T-shirts"), which is unreadable in a table and no more informative.
+        """
+        cache_key = {"endpoint": "seller-taxonomy/nodes", "v": 2}
+        cached = None if refresh else self.cache.get("etsy", cache_key, ttl_hours=720)
+        if cached is None:
+            payload = request_json(
+                f"{BASE_URL}/seller-taxonomy/nodes", headers=self._headers
+            )
+            cached = payload.get("results") or []
+            self.cache.set("etsy", cache_key, cached)
+
+        names: dict[int, str] = {}
+
+        def walk(nodes: list[dict[str, Any]], trail: list[str]) -> None:
+            for node in nodes:
+                name = node.get("name") or ""
+                path = trail + [name]
+                node_id = node.get("id")
+                if isinstance(node_id, int):
+                    names[node_id] = (
+                        path[0] if len(path) == 1 else f"{path[0]} > {path[-1]}"
+                    )
+                walk(node.get("children") or [], path)
+
+        walk(cached, [])
+        return names
 
 
 def _shop_names_from_payload(results: list[dict[str, Any]]) -> dict[int, str]:

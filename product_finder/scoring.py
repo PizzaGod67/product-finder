@@ -73,6 +73,20 @@ class DemandReport:
     opportunity_score: float
     flags: list[str] = field(default_factory=list)
     top_tags: list[tuple[str, int]] = field(default_factory=list)
+    # Which Etsy categories the sampled listings actually sit in, biggest
+    # first, as (label, percentage of the sample).
+    category_mix: list[tuple[str, float]] = field(default_factory=list)
+    # The same sample grouped by top-level department, which is what the
+    # "mixed categories" flag judges.
+    department_mix: list[tuple[str, float]] = field(default_factory=list)
+
+    @property
+    def main_category(self) -> str:
+        return self.department_mix[0][0] if self.department_mix else ""
+
+    @property
+    def main_category_share(self) -> float:
+        return self.department_mix[0][1] if self.department_mix else 0.0
 
     @property
     def is_opportunity(self) -> bool:
@@ -84,9 +98,12 @@ def analyse_keyword(
     listings: list[EtsyListing],
     listing_count: int,
     thresholds: Thresholds | None = None,
+    taxonomy: dict[int, str] | None = None,
 ) -> DemandReport:
     """Turn a pile of Etsy listings into one scored report."""
     limits = thresholds or Thresholds()
+    categories = category_mix(listings, taxonomy)
+    departments = department_mix(listings, taxonomy)
     favorites = [item.num_favorers for item in listings]
     sampled = len(listings)
     total_favorites = sum(favorites)
@@ -132,6 +149,11 @@ def analyse_keyword(
         flags.insert(0, "LOW COMPETITION + HIGH FAVORITES")
     if listing_count >= limits.saturated_listings:
         flags.append("saturated")
+    # No single category holding the sample means the keyword spans product
+    # types, so its demand and competition numbers are not about any one of
+    # them. Worth knowing before you act on a tempting score.
+    if departments and departments[0][1] < limits.mixed_category_share:
+        flags.append("mixed categories")
     if sampled and len({item.shop_name for item in listings}) <= max(3, sampled // 10):
         flags.append("dominated by few shops")
     if median_price and median_price < 8:
@@ -154,7 +176,65 @@ def analyse_keyword(
         opportunity_score=opportunity_score,
         flags=flags,
         top_tags=top_tags(listings),
+        category_mix=categories,
+        department_mix=departments,
     )
+
+
+def category_mix(
+    listings: list[EtsyListing],
+    names: dict[int, str] | None,
+    limit: int = 5,
+) -> list[tuple[str, float]]:
+    """What Etsy categories the sampled listings are actually in.
+
+    This is the check that stops you researching the wrong market. An
+    aesthetic keyword like "downtown girl" looks like a clothing term and
+    scores well on competition, but the listings behind it are a scatter of
+    t-shirts, stickers, phone cases and wall art. The demand and competition
+    numbers are real -- they are just not about clothing.
+    """
+    if not listings:
+        return []
+    counts: dict[str, int] = {}
+    for item in listings:
+        if not item.taxonomy_id:
+            continue
+        label = (names or {}).get(item.taxonomy_id) or f"category {item.taxonomy_id}"
+        counts[label] = counts.get(label, 0) + 1
+    if not counts:
+        return []
+    total = sum(counts.values())
+    ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:limit]
+    return [(label, round(100.0 * n / total, 1)) for label, n in ranked]
+
+
+def department_mix(
+    listings: list[EtsyListing], names: dict[int, str] | None
+) -> list[tuple[str, float]]:
+    """The same breakdown, but grouped by Etsy's top-level department.
+
+    This is what the "mixed categories" flag should judge, not the leaf
+    category. "y2k baby tee" splits across T-shirts, Tops & Tees and Crop
+    Tops -- three leaves, but 90% one department, so it is a perfectly
+    coherent clothing market. "downtown girl" splits across Clothing, Art &
+    Collectibles and Paper & Party Supplies, which is a genuinely different
+    thing and the case worth warning about.
+    """
+    if not listings:
+        return []
+    counts: dict[str, int] = {}
+    for item in listings:
+        if not item.taxonomy_id:
+            continue
+        label = (names or {}).get(item.taxonomy_id) or ""
+        department = label.split(" > ")[0] if label else "Uncategorised"
+        counts[department] = counts.get(department, 0) + 1
+    if not counts:
+        return []
+    total = sum(counts.values())
+    ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    return [(label, round(100.0 * n / total, 1)) for label, n in ranked]
 
 
 def top_tags(listings: list[EtsyListing], limit: int = 12) -> list[tuple[str, int]]:

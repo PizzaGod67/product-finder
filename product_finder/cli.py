@@ -59,11 +59,26 @@ def print_keyword_result(
         for flag in demand.flags:
             if flag.isupper():
                 rendered.append(paint.good(f"[{flag}]"))
-            elif flag in ("saturated", "dominated by few shops", "low price ceiling"):
+            elif flag in (
+                "saturated",
+                "dominated by few shops",
+                "low price ceiling",
+                "mixed categories",
+            ):
                 rendered.append(paint.bad(f"[{flag}]"))
             else:
                 rendered.append(paint.warn(f"[{flag}]"))
         print("Flags: " + " ".join(rendered))
+
+    if demand.category_mix:
+        parts = [f"{label} {share:.0f}%" for label, share in demand.category_mix[:4]]
+        print(paint.dim("What these listings actually are: ") + ", ".join(parts))
+        if "mixed categories" in demand.flags:
+            print(paint.bad(
+                f"  Careful: only {demand.main_category_share:.0f}% of this keyword's "
+                f"listings are {demand.main_category}.\n"
+                "  The scores above describe that whole mixture, not one product type."
+            ))
 
     for warning in result.warnings:
         print(paint.warn("Note: ") + warning)
